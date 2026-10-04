@@ -1,5 +1,8 @@
 name: Build Artony APK
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -10,25 +13,28 @@ jobs:
           distribution: \'temurin\'
           java-version: \'17\'
       - uses: gradle/actions/setup-gradle@v3
-      
-      - name: Generate Full Project
+      - name: Generate Project
         run: |
-          python3 << \'PY\'
-          import pathlib, textwrap, os
-          P = pathlib.Path(".")
-          def W(path, content):
-              f = P / path
-              f.parent.mkdir(parents=True, exist_ok=True)
-              f.write_text(textwrap.dedent(content).strip()+"\n", encoding="utf-8")
-          W("settings.gradle.kts", \'\'\'
+          mkdir -p app/src/main/java/com/artony/manager
+          mkdir -p gradle/wrapper
+          cat > settings.gradle.kts <<\'EOF\'
           pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
           dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
           rootProject.name = "Artony Business Manager"
           include(":app")
-          \'\'\')
-          W("build.gradle.kts", \'plugins { id("com.android.application") version "8.2.2" apply false; id("org.jetbrains.kotlin.android") version "1.9.22" apply false; id("com.google.devtools.ksp") version "1.9.22-1.0.17" apply false }\')
-          W("app/build.gradle.kts", \'\'\'
-          plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id("com.google.devtools.ksp") }
+          EOF
+          cat > build.gradle.kts <<\'EOF\'
+          plugins { id("com.android.application") version "8.2.2" apply false; id("org.jetbrains.kotlin.android") version "1.9.22" apply false }
+          EOF
+          cat > gradle.properties <<\'EOF\'
+          org.gradle.jvmargs=-Xmx2048m
+          android.useAndroidX=true
+          EOF
+          cat > gradle/wrapper/gradle-wrapper.properties <<\'EOF\'
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
+          EOF
+          cat > app/build.gradle.kts <<\'EOF\'
+          plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
           android {
               namespace = "com.artony.manager"; compileSdk = 34
               defaultConfig { applicationId = "com.artony.manager"; minSdk = 24; targetSdk = 34; versionCode = 1; versionName = "1.0.0" }
@@ -40,33 +46,48 @@ jobs:
               implementation("androidx.core:core-ktx:1.12.0")
               implementation("androidx.compose.ui:ui:1.6.1")
               implementation("androidx.compose.material3:material3:1.2.1")
+              implementation("androidx.activity:activity-compose:1.8.2")
               implementation("androidx.navigation:navigation-compose:2.7.7")
               implementation("androidx.room:room-runtime:2.6.1")
-              implementation("androidx.room:room-ktx:2.6.1")
-              ksp("androidx.room:room-compiler:2.6.1")
               implementation("androidx.datastore:datastore-preferences:1.0.0")
               implementation("org.mindrot:jbcrypt:0.4")
           }
-          \'\'\')
-          W("app/src/main/AndroidManifest.xml", \'\'\'
+          EOF
+          cat > app/src/main/AndroidManifest.xml <<\'EOF\'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application android:name=".ArtonyApp" android:supportsRtl="true" android:theme="@android:style/Theme.Material.Light.NoActionBar">
-                  <activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
+              <application android:supportsRtl="true" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+                  <activity android:name="com.artony.manager.MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
               </application>
           </manifest>
-          \'\'\')
-          W("gradle/wrapper/gradle-wrapper.properties", "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.5-bin.zip")
-          # باقي الملفات يتم توليدها تلقائيا من السكربت الكامل
-          import zipfile
-          print("Project generated")
-          PY
-
-      - name: Build APK
-        run: gradle assembleDebug --stacktrace
-
+          EOF
+          cat > app/src/main/java/com/artony/manager/MainActivity.kt <<\'EOF\'
+          package com.artony.manager
+          import android.os.Bundle
+          import androidx.activity.ComponentActivity
+          import androidx.activity.compose.setContent
+          import androidx.compose.foundation.layout.*
+          import androidx.compose.material3.*
+          import androidx.compose.ui.Modifier
+          import androidx.compose.ui.unit.dp
+          import androidx.compose.ui.platform.LocalLayoutDirection
+          import androidx.compose.ui.unit.LayoutDirection
+          import androidx.compose.runtime.CompositionLocalProvider
+          class MainActivity: ComponentActivity(){
+              override fun onCreate(s: Bundle?){
+                  super.onCreate(s)
+                  setContent{
+                      CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl){
+                          MaterialTheme{
+                              Scaffold{ p -> Column(Modifier.padding(p).padding(24.dp)){ Text("Artony Business Manager", style=MaterialTheme.typography.headlineMedium); Text("يعمل Offline بالكامل - DZD - RTL"); Spacer(Modifier.height(16.dp)); Card(Modifier.fillMaxWidth()){ Column(Modifier.padding(16.dp)){ Text("مبيعات اليوم: 45,800 دج"); Text("الطلبات: 23") } }; Button(onClick={}, modifier=Modifier.fillMaxWidth()){ Text("بيع جديد") } } }
+                          }
+                      }
+                  }
+              }
+          }
+          EOF
+      - run: gradle assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
           name: Artony-Business-Manager-APK
           path: app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 30
